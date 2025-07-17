@@ -3,4 +3,5 @@ matplotlib
 tensorflow
 scikit-learn
 opencv-python
-pillow
+Pillow
+datasets
