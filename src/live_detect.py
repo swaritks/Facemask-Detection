@@ -3,7 +3,7 @@ import torch
 import sys
 from torchvision import transforms
 
-sys.path.append(".")
+sys.path.append(".") 
 from models.cnn import CNN
 
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")  # type: ignore
@@ -21,7 +21,7 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-cap = cv2.VideoCapture(1) 
+cap = cv2.VideoCapture(0)  
 
 class_names = ['with_mask', 'without_mask']  
 
@@ -31,10 +31,27 @@ while True:
         break
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+    
+    
+    faces = face_cascade.detectMultiScale(
+        gray, 
+        scaleFactor=1.1,        
+        minNeighbors=3,        
+        minSize=(30, 30),       
+        maxSize=(300, 300),     
+        flags=cv2.CASCADE_SCALE_IMAGE
+    )
+    
+    if len(faces) == 0:
+        faces = face_cascade.detectMultiScale(
+            gray,
+            scaleFactor=1.05,   
+            minNeighbors=2,    
+            minSize=(20, 20),   
+            flags=cv2.CASCADE_SCALE_IMAGE
+        )
 
     for (x, y, w, h) in faces:
-        
         face = frame[y:y+h, x:x+w]
         
         face_rgb = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
@@ -49,7 +66,7 @@ while True:
 
         mask_prob = float(probs[0, 0].item()) * 100
         no_mask_prob = float(probs[0, 1].item()) * 100
-
+        
         predicted_class = class_names[int(predicted.item())]
         max_confidence = float(confidence.item()) * 100
 
@@ -64,6 +81,7 @@ while True:
 
     cv2.imshow("Facemask Detection", frame)
 
+    # Exit on 'q'
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
