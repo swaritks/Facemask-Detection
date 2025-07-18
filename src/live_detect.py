@@ -1,29 +1,67 @@
 import cv2
 import torch
 import sys
-sys.path.append(".")  # Add this here
+from torchvision import transforms
 
+sys.path.append(".")
 from models.cnn import CNN
 
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")  # type: ignore
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model = CNN()
-model.load_state_dict(torch.load("models/facemask_cnn.pth"))
-
+model.load_state_dict(torch.load("models/facemask_cnn.pth", map_location=device))
+model = model.to(device)
 model.eval()
-cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
+
+transform = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.Resize((224, 224)),
+    transforms.ToTensor()
+])
+
+cap = cv2.VideoCapture(1) 
+
+class_names = ['with_mask', 'without_mask']  
 
 while True:
     ret, frame = cap.read()
     if not ret:
         break
 
-    img = cv2.resize(frame, (224, 224))
-    img = torch.tensor(img).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
-    output = model(img)
-    label = "Mask" if torch.argmax(output) == 0 else "No Mask"
+    for (x, y, w, h) in faces:
+        
+        face = frame[y:y+h, x:x+w]
+        
+        face_rgb = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
+        
+        face_tensor: torch.Tensor = transform(face_rgb)  # type: ignore
+        face_tensor = face_tensor.unsqueeze(0).to(device)
 
-    cv2.putText(frame, label, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        with torch.no_grad():
+            output = model(face_tensor)
+            probs = torch.softmax(output, dim=1)
+            confidence, predicted = torch.max(probs, 1)
+
+        mask_prob = float(probs[0, 0].item()) * 100
+        no_mask_prob = float(probs[0, 1].item()) * 100
+
+        predicted_class = class_names[int(predicted.item())]
+        max_confidence = float(confidence.item()) * 100
+
+        display_text = f"{predicted_class}: {max_confidence:.1f}%"
+        detailed_text = f"Mask: {mask_prob:.1f}% | No Mask: {no_mask_prob:.1f}%"
+
+        color = (0, 255, 0) if predicted_class == 'mask' else (0, 0, 255)
+
+        cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
+        cv2.putText(frame, display_text, (x, y - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+        cv2.putText(frame, detailed_text, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
     cv2.imshow("Facemask Detection", frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
