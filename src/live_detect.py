@@ -21,7 +21,7 @@ transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-cap = cv2.VideoCapture(0)  
+cap = cv2.VideoCapture(1)  
 
 class_names = ['with_mask', 'without_mask']  
 
